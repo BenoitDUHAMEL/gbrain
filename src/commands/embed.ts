@@ -177,8 +177,9 @@ async function embedPage(
     }
   }
 
-  // Embed chunks without embeddings
-  const toEmbed = chunks.filter(c => !c.embedded_at);
+  // Embed chunks without embeddings (skip empty-text chunks — they produce
+  // zero-dim vectors that pgvector rejects with "dimensions 1024 and 0").
+  const toEmbed = chunks.filter(c => !c.embedded_at && c.chunk_text && c.chunk_text.trim().length > 0);
   result.total_chunks += chunks.length;
   result.skipped += chunks.length - toEmbed.length;
 
