@@ -9,13 +9,26 @@
 
 import OpenAI from 'openai';
 
-const MODEL = 'text-embedding-3-large';
-const DIMENSIONS = 1536;
+// [brain-private patch] Make model and dimensions configurable via env vars.
+// Defaults preserved for upstream compatibility.
+const MODEL = process.env.GBRAIN_EMBED_MODEL || 'text-embedding-3-large';
+const DIMENSIONS = process.env.GBRAIN_EMBED_DIMENSIONS
+  ? parseInt(process.env.GBRAIN_EMBED_DIMENSIONS, 10)
+  : 1536;
+// When using Ollama or another provider that doesn't support the `dimensions`
+// API parameter, set GBRAIN_EMBED_SKIP_DIMENSIONS_PARAM=1 to omit it from requests.
+const SKIP_DIMENSIONS_PARAM = process.env.GBRAIN_EMBED_SKIP_DIMENSIONS_PARAM === '1';
 const MAX_CHARS = 8000;
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 4000;
 const MAX_DELAY_MS = 120000;
 const BATCH_SIZE = 100;
+// Hard per-request timeout — without this, a proxy that hangs (LiteLLM/Ollama
+// on a bad batch) can wedge a worker indefinitely. 90s is generous for a 100×8KB
+// batch on local Ollama; bump via GBRAIN_EMBED_TIMEOUT_MS if needed.
+const REQUEST_TIMEOUT_MS = process.env.GBRAIN_EMBED_TIMEOUT_MS
+  ? parseInt(process.env.GBRAIN_EMBED_TIMEOUT_MS, 10)
+  : 90_000;
 
 let client: OpenAI | null = null;
 
@@ -62,10 +75,18 @@ export async function embedBatch(
 async function embedBatchWithRetry(texts: string[]): Promise<Float32Array[]> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const response = await getClient().embeddings.create({
+      const createParams: any = {
         model: MODEL,
         input: texts,
-        dimensions: DIMENSIONS,
+        // Force 'float' so the SDK skips its base64-decode path — LiteLLM/Ollama
+        // return plain arrays even when base64 is requested, which corrupts results.
+        encoding_format: 'float',
+      };
+      if (!SKIP_DIMENSIONS_PARAM) {
+        createParams.dimensions = DIMENSIONS;
+      }
+      const response = await getClient().embeddings.create(createParams, {
+        timeout: REQUEST_TIMEOUT_MS,
       });
 
       // Sort by index to maintain order
