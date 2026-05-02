@@ -93,19 +93,32 @@ export async function runEmbedCore(engine: BrainEngine, opts: EmbedOpts): Promis
 
 export async function runEmbed(engine: BrainEngine, args: string[]): Promise<EmbedResult | undefined> {
   const slugsIdx = args.indexOf('--slugs');
+  const slugsFileIdx = args.indexOf('--slugs-file');
   const all = args.includes('--all');
   const stale = args.includes('--stale');
   const dryRun = args.includes('--dry-run');
 
   let opts: EmbedOpts;
-  if (slugsIdx >= 0) {
+  if (slugsFileIdx >= 0) {
+    const filePath = args[slugsFileIdx + 1];
+    if (!filePath || filePath.startsWith('--')) {
+      console.error('Usage: gbrain embed --slugs-file <path> [--dry-run]');
+      process.exit(1);
+    }
+    const { readFileSync } = await import('fs');
+    const slugs = readFileSync(filePath, 'utf8')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    opts = { slugs, dryRun };
+  } else if (slugsIdx >= 0) {
     opts = { slugs: args.slice(slugsIdx + 1).filter(a => !a.startsWith('--')), dryRun };
   } else if (all || stale) {
     opts = { all, stale, dryRun };
   } else {
     const slug = args.find(a => !a.startsWith('--'));
     if (!slug) {
-      console.error('Usage: gbrain embed [<slug>|--all|--stale|--slugs s1 s2 ...] [--dry-run]');
+      console.error('Usage: gbrain embed [<slug>|--all|--stale|--slugs s1 s2 ...|--slugs-file path] [--dry-run]');
       process.exit(1);
     }
     opts = { slug, dryRun };
