@@ -2,7 +2,9 @@
  * Embedding Service
  * Ported from production Ruby implementation (embedding_service.rb, 190 LOC)
  *
- * OpenAI text-embedding-3-large at 1536 dimensions.
+ * Configurable embedding provider. Upstream defaults to OpenAI
+ * text-embedding-3-large at 1536 dimensions; brain-private deployments use
+ * bge-m3-compatible 1024-dimensional embeddings via env vars.
  * Retry with exponential backoff (4s base, 120s cap, 5 retries).
  * 8000 character input truncation.
  */
